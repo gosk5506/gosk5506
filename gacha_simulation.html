@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>림붕이들을 위한 콜라보 가챠 미리 해 보기</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+<style>
+body { font-family: sans-serif; padding: 10px; margin:0; }
+input[type="number"] { width: 60px; padding: 5px; font-size: 16px; margin-right: 10px; }
+button { padding: 12px 20px; font-size: 18px; margin: 5px; background-color: #eee; border: 1px solid #ccc; cursor: pointer; min-width: 120px; }
+button.active { background-color: #4CAF50; color: white; }
+
+#result { font-size: 16px; font-weight: bold; margin-top: 20px; white-space: pre-wrap; word-break: break-word; }
+
+canvas { width: 100% !important; max-width: 100%; height: auto !important; }
+
+.success { color: green; }
+.fail { color: #888; }
+.bonus { color: orange; font-weight: bold; }
+.pikk { color: blue; font-weight: bold; }
+.rainbow span { font-weight: bold; }
+/* 톤 낮춘 무지개 색 */
+.rainbow span:nth-child(7n+1) { color: #b71c1c; }
+.rainbow span:nth-child(7n+2) { color: #e65100; }
+.rainbow span:nth-child(7n+3) { color: #f9a825; }
+.rainbow span:nth-child(7n+4) { color: #2e7d32; }
+.rainbow span:nth-child(7n+5) { color: #1565c0; }
+.rainbow span:nth-child(7n+6) { color: #283593; }
+.rainbow span:nth-child(7n+7) { color: #6a1b9a; }
+
+@media screen and (max-width: 600px) {
+    button { font-size: 16px; padding: 10px 15px; min-width: 100px; }
+    input[type="number"] { width: 50px; font-size: 14px; }
+    #result { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+
+<h2 id="title" class="rainbow">림붕이들을 위한 콜라보 가챠 미리 해 보기</h2>
+
+<label>시행 횟수: <input type="number" id="trialsInput" value="400" min="1"></label>
+
+<div>
+    <button id="btnReady">준비완료</button>
+    <button id="btnNotReady">준비안됨</button>
+</div>
+
+<div>
+    <button id="saveTxtBtn">결과 저장 (.txt)</button>
+    <button id="copyBtn">결과 복사</button>
+</div>
+
+<div id="result"></div>
+
+<canvas id="summaryChart" style="margin-top:20px;"></canvas>
+
+<script>
+function rainbowifyTitle() {
+    const title = document.getElementById('title');
+    const text = title.textContent;
+    title.innerHTML = '';
+    for (let i = 0; i < text.length; i++) {
+        const span = document.createElement('span');
+        span.textContent = text[i];
+        title.appendChild(span);
+    }
+}
+rainbowifyTitle();
+
+let chart;
+
+function runSimulation(mode, button) {
+    document.getElementById('btnReady').classList.remove('active');
+    document.getElementById('btnNotReady').classList.remove('active');
+    button.classList.add('active');
+
+    const trials = parseInt(document.getElementById('trialsInput').value);
+    let successCount = 0, bonusCount = 0, pikkCount = 0, failCount = 0;
+    let output = '';
+
+    let successProb = (mode==='ready') ? 0.013 : 0.0065;
+    let pikkProb = (mode==='notready') ? 0.0065 : 0;
+
+    for(let i=0;i<trials;i++){
+        let value='', isSuccess=false, isPikk=false;
+
+        if(Math.random() < successProb) isSuccess = true;
+        else if(Math.random() < pikkProb) isPikk = true;
+
+        if(isPikk){pikkCount++; failCount++; value='<span class="pikk">2</span>';}
+        else if(isSuccess){successCount++; value='<span class="success">1</span>';}
+        else {failCount++; value='<span class="fail">0</span>';}
+
+        if((i+1)%200===0){bonusCount++; value='<span class="bonus">B</span>';}
+
+        output += value+' ';
+        if((i+1)%10===0) output+='\n';
+    }
+
+    const totalSuccess = successCount + bonusCount;
+
+    output += `\n총 성공 횟수: ${totalSuccess}\n`;
+    output += `총 실패 횟수: ${failCount}\n`;
+    output += `성공 횟수: ${successCount}\n`;
+    output += `정가 횟수: ${bonusCount}\n`;
+    if(mode==='notready') output += `픽뚫 횟수: ${pikkCount}`;
+
+    document.getElementById('result').innerHTML = output;
+
+    const ctx = document.getElementById('summaryChart').getContext('2d');
+    if(chart) chart.destroy();
+
+    let chartData = [successCount, failCount, pikkCount, bonusCount];
+    let chartLabels = ['성공','실패','픽뚫','정가'];
+    let chartColors = ['green','gray','blue','orange'];
+
+    if(mode==='ready'){
+        chartData.splice(2,1);
+        chartLabels.splice(2,1);
+        chartColors.splice(2,1);
+    }
+
+    chart = new Chart(ctx, {
+        type:'bar',
+        data:{
+            labels: chartLabels,
+            datasets:[{
+                label:'횟수',
+                data: chartData,
+                backgroundColor: chartColors
+            }]
+        },
+        options:{
+            responsive:true,
+            plugins:{
+                legend:{display:false},
+                datalabels:{
+                    anchor:'center',
+                    align:'center',
+                    color:function(context){
+                        const index = context.dataIndex;
+                        if(index===0) return 'green';
+                        if(index===1) return 'red';
+                        if(index===2 && mode!=='ready') return 'blue';
+                        if(index===3 || (index===2 && mode==='ready')) return 'orange';
+                        return '#000';
+                    },
+                    font:{weight:'bold', size:14},
+                    formatter:function(value){ return value; }
+                }
+            },
+            scales:{y:{beginAtZero:true, precision:0}}
+        },
+        plugins:[ChartDataLabels]
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    document.getElementById('btnReady').addEventListener('click', function() {
+        runSimulation('ready', this);
+    });
+    document.getElementById('btnNotReady').addEventListener('click', function() {
+        runSimulation('notready', this);
+    });
+    document.getElementById('saveTxtBtn').addEventListener('click', function() {
+        const text = document.getElementById('result').innerText;
+        const blob = new Blob([text], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '가챠결과.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+    document.getElementById('copyBtn').addEventListener('click', function() {
+        const text = document.getElementById('result').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            alert('결과가 클립보드에 복사되었습니다!');
+        });
+    });
+});
+</script>
+
+</body>
+</html>
